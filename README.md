@@ -190,6 +190,24 @@ docker run --rm -i hadolint/hadolint hadolint - < Dockerfile
 CI runs hadolint, a Trivy scan and a smoke test of the hardened container on
 every change and weekly; Dependabot proposes base-image and action updates.
 
+Releasing
+---------
+
+Two repository secrets enable publishing (GitHub: Settings, Secrets and
+variables, Actions): `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, a Docker Hub
+access token with Read & Write scope. Without them the publishing jobs are
+skipped and CI stays green.
+
+* Every push to `master` syncs this README to the Docker Hub overview.
+* Pushing a version tag publishes the image for `linux/amd64` and
+  `linux/arm64`, with SBOM and provenance attestations, after lint, scan and
+  smoke test have passed:
+
+  ```bash
+  git tag -a v2.0.1 -m "tor-rotating-proxy 2.0.1"
+  git push origin v2.0.1        # -> tags 2.0.1, 2.0 and latest on Docker Hub
+  ```
+
 Files: [Dockerfile](Dockerfile), [tor_proxy.rb](tor_proxy.rb) (supervisor,
 config, SOCKS5 and control-port clients), [start.rb](start.rb),
 [healthcheck.rb](healthcheck.rb), [haproxy.cfg.erb](haproxy.cfg.erb),
