@@ -195,7 +195,9 @@ Releasing
 
 Two repository secrets enable publishing (GitHub: Settings, Secrets and
 variables, Actions): `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, a Docker Hub
-access token with Read & Write scope. Without them the publishing jobs are
+access token. Pushing images needs Read & Write scope; syncing the README to
+the Hub overview needs Read, Write & Delete, because that is what Hub's
+repository-description API requires. Without the secrets both jobs are
 skipped and CI stays green.
 
 * Every push to `master` syncs this README to the Docker Hub overview.

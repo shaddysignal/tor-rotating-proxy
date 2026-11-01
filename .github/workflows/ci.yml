@@ -102,8 +102,10 @@ jobs:
           test "${took}" -lt 10
 
   # The two Docker Hub jobs below need the repository secrets DOCKERHUB_USERNAME
-  # and DOCKERHUB_TOKEN (an access token with Read & Write scope). Until those
-  # exist, they are skipped rather than failing.
+  # and DOCKERHUB_TOKEN. Publishing images works with a Read & Write access
+  # token; updating the repository description (the overview job) requires
+  # Read, Write & Delete, which is what Hub's description API demands. Until the
+  # secrets exist, both jobs are skipped rather than failing.
   hub-credentials:
     name: Docker Hub credentials present
     runs-on: ubuntu-latest
