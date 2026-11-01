@@ -5,6 +5,8 @@ on:
     branches: [master]
     tags: ['v*']
   pull_request:
+  # Manual run from the Actions tab: syncs the README to Docker Hub (after approval).
+  workflow_dispatch:
   schedule:
     # Weekly rebuild and scan so newly published CVEs in the base image surface
     # even when nothing in this repository changes.
@@ -20,8 +22,26 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    outputs:
+      readme_changed: ${{ steps.readme.outputs.changed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Did README.md change in this push?
+        id: readme
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          if ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"   # unknown base (new branch or force push): assume yes
+          elif git diff --name-only "$BEFORE" "$AFTER" | grep -qx 'README.md'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: hadolint
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
@@ -101,25 +121,22 @@ jobs:
           echo "stopped in ${took}s"
           test "${took}" -lt 10
 
-  # The two Docker Hub jobs below need the repository secrets DOCKERHUB_USERNAME
-  # and DOCKERHUB_TOKEN. Publishing images works with a Read & Write access
-  # token; updating the repository description (the overview job) requires
-  # Read, Write & Delete, which is what Hub's description API demands. Until the
-  # secrets exist, both jobs are skipped rather than failing.
-  hub-credentials:
-    name: Docker Hub credentials present
-    runs-on: ubuntu-latest
-    outputs:
-      present: ${{ steps.check.outputs.present }}
-    steps:
-      - id: check
-        run: echo "present=${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
-
+  # Both Docker Hub jobs run in the "dockerhub" GitHub Environment, which holds
+  # the DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets and requires a reviewer
+  # to approve each run before the job can start. Publishing images needs a
+  # Read & Write access token; updating the repository description (overview)
+  # needs Read, Write & Delete, which is what Hub's description API demands.
   overview:
     name: Sync README to Docker Hub
-    needs: [build, hub-credentials]
-    if: needs.hub-credentials.outputs.present == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [lint, build]
+    # Only when the push changed README.md, or on a manual run from master.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.lint.outputs.readme_changed == 'true')
+      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
+    environment:
+      name: dockerhub
+      url: https://hub.docker.com/r/shaddysignal/tor-rotating-proxy
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
@@ -134,9 +151,12 @@ jobs:
 
   publish:
     name: Publish image
-    needs: [build, hub-credentials]
-    if: needs.hub-credentials.outputs.present == 'true' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    environment:
+      name: dockerhub
+      url: https://hub.docker.com/r/shaddysignal/tor-rotating-proxy
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0

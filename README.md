@@ -193,22 +193,41 @@ every change and weekly; Dependabot proposes base-image and action updates.
 Releasing
 ---------
 
-Two repository secrets enable publishing (GitHub: Settings, Secrets and
-variables, Actions): `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, a Docker Hub
-access token. Pushing images needs Read & Write scope; syncing the README to
-the Hub overview needs Read, Write & Delete, because that is what Hub's
-repository-description API requires. Without the secrets both jobs are
-skipped and CI stays green.
+Publishing runs in a GitHub Environment named `dockerhub` that holds the
+Docker Hub credentials and requires your approval for every run, so a
+compromised workflow or dependency cannot push to Hub on its own. One-time
+setup (repository Settings, Environments, New environment `dockerhub`):
 
-* Every push to `master` syncs this README to the Docker Hub overview.
-* Pushing a version tag publishes the image for `linux/amd64` and
-  `linux/arm64`, with SBOM and provenance attestations, after lint, scan and
-  smoke test have passed:
+1. **Deployment protection rules**: enable *Required reviewers* and add
+   yourself. Leave *Prevent self-review* off on a single-maintainer repo.
+2. **Deployment branches and tags**: *Selected branches and tags*, add the
+   branch `master` and the tag pattern `v*`. Nothing else can use the
+   environment's secrets.
+3. **Environment secrets**: `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, a
+   Docker Hub access token. Pushing images needs Read & Write scope; syncing
+   the README to the Hub overview needs Read, Write & Delete, because that is
+   what Hub's repository-description API requires.
+4. Remove any repository-level secrets with the same names, so the token is
+   reachable only through the protected environment.
+
+Required reviewers are available on public repositories and paid plans.
+
+What then happens:
+
+* A push to `master` that changes `README.md` queues **Sync README to Docker
+  Hub**. The run shows *Review deployments*; approve it and the overview on
+  Hub is replaced. Other pushes do not ask. Run it by hand any time from the
+  Actions tab (*CI*, *Run workflow*).
+* Pushing a version tag queues **Publish image**, which, once approved,
+  builds `linux/amd64` and `linux/arm64` with SBOM and provenance
+  attestations and pushes them, after lint, scan and smoke test have passed:
 
   ```bash
   git tag -a v2.0.1 -m "tor-rotating-proxy 2.0.1"
   git push origin v2.0.1        # -> tags 2.0.1, 2.0 and latest on Docker Hub
   ```
+
+Unapproved runs wait up to 30 days and then fail; rejecting one is harmless.
 
 Files: [Dockerfile](Dockerfile), [tor_proxy.rb](tor_proxy.rb) (supervisor,
 config, SOCKS5 and control-port clients), [start.rb](start.rb),
